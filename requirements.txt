@@ -3,3 +3,5 @@ spotipy
 streamlit
 python-dotenv
 pydub
+google-generativeai
+requests

@@ -10,6 +10,7 @@ urllib3.disable_warnings(urllib3.exceptions.NotOpenSSLWarning)
 from mood_to_music import analyze_mood
 from spotify_client import SpotifyClient
 from image_generator import generate_mood_image
+from video_generator import generate_mood_video
 from audio_utils import transcribe_audio
 
 load_dotenv()
@@ -42,7 +43,7 @@ def main():
             st.markdown("""
             <div style="text-align: center; padding: 2rem 0;">
                 <h1 style="font-size: 3rem; margin-bottom: 0.5rem;">🎨 MoodCanvas</h1>
-                <p style="font-size: 1.2rem; color: #666; margin-bottom: 2rem;">Transform your emotions into music and art</p>
+                <p style="font-size: 1.2rem; color: #666; margin-bottom: 2rem;">Transform your emotions into music, art & video</p>
             </div>
             """, unsafe_allow_html=True)
             
@@ -142,9 +143,9 @@ def create_mood_canvas(mood_text: str):
             if playlist_result:
                 st.success("🎉 Your MoodCanvas is ready!")
                 
-                # Main results layout - two columns for image and playlist
+                # Main results layout - three columns for image, playlist, and video
                 st.markdown("---")
-                result_col1, result_col2 = st.columns([1, 1])
+                result_col1, result_col2, result_col3 = st.columns([1, 1, 1])
                 
                 with result_col1:
                     # Generate and display mood image
@@ -155,6 +156,11 @@ def create_mood_canvas(mood_text: str):
                     # Display playlist
                     st.markdown("### 🎵 Your Playlist")
                     display_spotify_playlist(playlist_result, mood_data, len(tracks))
+                
+                with result_col3:
+                    # Generate and display mood video
+                    st.markdown("### 🎬 Your Mood Video")
+                    generate_and_display_video(mood_data, mood_text)
                 
                 # Add data flow visualization
                 show_data_flow_visualization(mood_text, mood_data, tracks, playlist_result)
@@ -255,6 +261,77 @@ def display_spotify_playlist(playlist_result: dict, mood_data: dict, track_count
         type="primary",
         use_container_width=True
     )
+
+
+def generate_and_display_video(mood_data: dict, mood_text: str):
+    """Generate and display the mood video in a clean layout."""
+    with st.spinner("Creating your mood video... (this may take 1-6 minutes)"):
+        try:
+            video_result = generate_mood_video(
+                emotional_tags=mood_data["emotional_tags"],
+                genres=mood_data["genres"], 
+                mood_text=mood_text,
+                visual_imagery=mood_data.get("visual_imagery", []),
+                movement_quality=mood_data.get("movement_quality", ""),
+                color_palette=mood_data.get("color_palette", []),
+                energy_level=mood_data.get("energy_level", "medium")
+            )
+            
+            if video_result:
+                if video_result.get('error'):
+                    # Handle the current SDK limitation
+                    st.info("🎬 **Video Generation Ready**")
+                    st.write("Your video prompt has been generated!")
+                    
+                    # Show the generated prompt
+                    st.code(video_result['prompt'], language="text")
+                    
+                    st.warning("⚠️ Video generation is currently awaiting Google AI SDK update")
+                    st.info("💡 You can use this prompt at [Google AI Studio](https://ai.google.dev/) for now")
+                    
+                elif video_result.get('video_data'):
+                    # If we have video data as base64
+                    import base64
+                    video_bytes = base64.b64decode(video_result['video_data'])
+                    st.video(video_bytes)
+                    
+                    # Download button
+                    from datetime import datetime
+                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                    filename = f"moodcanvas_video_{timestamp}.mp4"
+                    
+                    st.download_button(
+                        label="💾 Download Video",
+                        data=video_bytes,
+                        file_name=filename,
+                        mime="video/mp4",
+                        use_container_width=True
+                    )
+                    
+                elif video_result.get('video_url'):
+                    # If we have a URL
+                    st.video(video_result['video_url'])
+                
+                # Show video analysis
+                st.markdown("**Video Analysis:**")
+                st.write(f"🎭 **Emotions:** {', '.join(mood_data['emotional_tags'][:2])}")
+                st.write(f"🎵 **Style:** {', '.join(mood_data['genres'][:2])}")
+                
+                if mood_data.get("visual_imagery"):
+                    st.write(f"🖼️ **Visuals:** {', '.join(mood_data['visual_imagery'][:2])}")
+                
+                if mood_data.get("energy_level"):
+                    st.write(f"⚡ **Energy:** {mood_data['energy_level']}")
+                    
+                st.write("🎬 **Duration:** 8 seconds")
+                st.write("🔊 **Audio:** Synchronized soundtrack")
+                
+            else:
+                st.warning("⚠️ Could not generate video. Check your Google AI API key.")
+                
+        except Exception as e:
+            st.warning(f"Video generation failed: {e}")
+            st.info("💡 Video generation requires a Google AI API key. Add GOOGLE_AI_API_KEY to your .env file.")
 
 
 def test_spotify_integration():
@@ -378,6 +455,71 @@ def test_image_generation_ui():
             st.write("---")
     else:
         st.warning("⚠️ DALL-E API not configured - check OpenAI API key")
+
+
+def test_video_generation_ui():
+    """Test video generation."""
+    st.subheader("Testing Video Generation")
+    
+    from video_generator import validate_video_generation, generate_mood_video
+    
+    if validate_video_generation():
+        st.success("✅ Google AI Veo API configured")
+        
+        test_case = {
+            "tags": ["flowing", "peaceful"],
+            "genres": ["ambient", "electronic"],
+            "mood": "floating through digital clouds at sunset",
+            "visual_imagery": ["clouds", "floating", "sunset"],
+            "color_palette": ["soft orange", "purple", "gold"],
+            "energy_level": "medium"
+        }
+        
+        st.write(f"**Test: {test_case['mood']}**")
+        st.write(f"Tags: {test_case['tags']}")
+        st.write(f"Genres: {test_case['genres']}")
+        st.write(f"Visual elements: {test_case['visual_imagery']}")
+        
+        if st.button("Generate Test Video", type="primary"):
+            with st.spinner("Generating test video... (this may take 1-6 minutes)"):
+                try:
+                    video_result = generate_mood_video(
+                        test_case["tags"],
+                        test_case["genres"],
+                        test_case["mood"],
+                        test_case["visual_imagery"],
+                        color_palette=test_case["color_palette"],
+                        energy_level=test_case["energy_level"]
+                    )
+                    
+                    if video_result:
+                        st.success("✅ Test video generated")
+                        
+                        if video_result.get('video_data'):
+                            import base64
+                            video_bytes = base64.b64decode(video_result['video_data'])
+                            st.video(video_bytes)
+                            
+                            # Download button
+                            st.download_button(
+                                label="💾 Download Test Video",
+                                data=video_bytes,
+                                file_name="test_mood_video.mp4",
+                                mime="video/mp4"
+                            )
+                        elif video_result.get('video_url'):
+                            st.video(video_result['video_url'])
+                            st.write(f"Video URL: {video_result['video_url']}")
+                        
+                        st.write(f"**Prompt used:** {video_result.get('prompt', 'N/A')}")
+                    else:
+                        st.error("❌ Test video generation failed")
+                        
+                except Exception as e:
+                    st.error(f"❌ Test error: {e}")
+    else:
+        st.warning("⚠️ Google AI API not configured - check GOOGLE_AI_API_KEY in .env file")
+        st.info("Get your API key at: https://ai.google.dev/")
 
 
 def show_data_flow_visualization(mood_text: str, mood_data: dict, tracks: list, image_data: str = None):
@@ -528,7 +670,7 @@ if __name__ == "__main__":
     # Developer tools at bottom
     st.markdown("---")
     with st.expander("🛠️ Developer Tools", expanded=False):
-        col1, col2, col3 = st.columns(3)
+        col1, col2, col3, col4 = st.columns(4)
         with col1:
             if st.button("🧪 Test Spotify", help="Test Spotify integration"):
                 test_spotify_integration()
@@ -538,3 +680,6 @@ if __name__ == "__main__":
         with col3:
             if st.button("🎨 Test Image Generation", help="Test DALL-E image generation"):
                 test_image_generation_ui()
+        with col4:
+            if st.button("🎬 Test Video Generation", help="Test Veo 3 video generation"):
+                test_video_generation_ui()
